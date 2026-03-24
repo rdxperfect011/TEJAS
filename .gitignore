@@ -3,3 +3,6 @@ dist
 bundle
 local_assets
 .vscode
+.env
+.env.*
+*.env
