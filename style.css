@@ -1,0 +1,204 @@
+body {
+  margin: 0px;
+  background-color: #f4f7fa; 
+  font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Mock page content to demonstrate the floating nature */
+.brand-header {
+  background-color: #ffffff;
+  padding: 30px 20px;
+  text-align: center;
+  border-bottom: 1px solid #e0e6ed;
+  color: #003366;
+}
+.brand-header h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.brand-header p {
+  margin: 10px 0 0 0;
+  color: #555;
+  font-size: 16px;
+}
+.mock-content {
+  padding: 50px 20px;
+  text-align: center;
+  color: #666;
+}
+
+/* Floating widget styles */
+#chat-widget-container {
+  position: fixed;
+  bottom: 90px;
+  right: 25px;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.9) translateY(20px);
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+  
+  border-radius: 18px;
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  transform-origin: bottom right;
+  width: calc(100vw - 50px);
+  max-width: 380px;
+  height: 600px;
+  max-height: 75vh;
+  background-color: white;
+}
+
+#chat-widget-container.show-widget {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1) translateY(0);
+}
+
+/* Custom Chat Header inside Widget */
+.widget-header {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #003366, #0056b3);
+  border-bottom: none;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  box-shadow: 0 4px 15px rgba(0, 51, 102, 0.2);
+  z-index: 2;
+}
+.widget-header img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin-right: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background-color: white;
+}
+.widget-header-text {
+  display: flex;
+  flex-direction: column;
+}
+.widget-header-text h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+.widget-header-text span {
+  font-size: 12px;
+  color: #d1e3ff;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+.widget-header-text span::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: #00e676;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(0, 230, 118, 0.6);
+}
+
+/* Force the custom element to respect the container boundary */
+tejas-chat {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+#chat-toggle-btn {
+  position: fixed;
+  bottom: 25px;
+  right: 25px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: #0056b3;
+  color: white;
+  border: none;
+  outline: none;
+  box-shadow: 0 4px 15px rgba(0, 86, 179, 0.4);
+  cursor: pointer;
+  z-index: 1001;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 28px;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#chat-toggle-btn:hover {
+  transform: scale(1.08);
+  background-color: #004494;
+}
+
+/* Chat tooltip simulating Lenovo's "Chat now" */
+.chat-tooltip {
+  position: fixed;
+  bottom: 35px;
+  right: 100px;
+  background-color: white;
+  padding: 12px 18px;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  font-size: 14px;
+  font-weight: 500;
+  color: #003366;
+  z-index: 1000;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) 1s both;
+}
+
+.chat-tooltip img {
+  width: 24px;
+  height: 24px;
+}
+
+.chat-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -6px;
+  transform: translateY(-50%);
+  border-width: 6px 0 6px 6px;
+  border-style: solid;
+  border-color: transparent transparent transparent white;
+}
+
+@keyframes bounceIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Mobile Device Adjustments */
+@media (max-width: 600px) {
+  #chat-widget-container {
+    right: 15px;
+    bottom: 80px; 
+  }
+  #chat-toggle-btn {
+    right: 15px;
+    bottom: 15px;
+    width: 55px;
+    height: 55px;
+    font-size: 24px;
+  }
+  .chat-tooltip {
+    display: none !important;
+  }
+  .brand-header h1 {
+    font-size: 22px;
+  }
+}
