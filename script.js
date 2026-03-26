@@ -10,7 +10,7 @@ chatElementRef.history = [
       <div style="text-align: right; font-size: 11.5px; opacity: 0.85; margin-top: 8px; font-weight: 500; color: #d1e3ff;">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
     </div>`
   },
-  {role: 'ai', text: 'Welcome to the official J&K Board of Technical Education (JKBOTE) portal! How can I assist you with your queries today? Try asking about "latest notifications", "admission forms", or any general questions.'},
+  {role: 'ai', html: `<span style="white-space:pre-wrap;">Welcome to the official J&K Board of Technical Education (JKBOTE) portal! How can I assist you with your queries today? Try asking about "latest notifications", "admission forms", or any general questions.</span><div style="text-align:left; font-size:11px; opacity:0.65; margin-top:5px; font-weight:500;">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`},
 ];
 
 // Ensure the AI label inside chat bubbles is named "TEJAS"
@@ -134,6 +134,100 @@ chatElementRef.request = {
   url: '/api/chat',
   method: 'POST'
 };
+
+// Intercept outgoing request to match backend expected format
+chatElementRef.requestInterceptor = (requestDetails) => {
+  const history = chatElementRef.history || [];
+  const messages = history
+    .filter(m => m.text || m.html)
+    .map(m => ({
+      role: m.role === 'ai' ? 'ai' : 'user',
+      text: m.text || ''
+    }));
+  // Add the current user message
+  if (requestDetails.body && requestDetails.body.messages) {
+    requestDetails.body = { messages: requestDetails.body.messages };
+  }
+  return requestDetails;
+};
+
+// Helper: get current time as HH:MM string
+function getCurrentTimeString() {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// Timestamp HTML snippet appended to every message
+function makeTimestampHTML(alignRight = false) {
+  return `<div style="text-align:${alignRight ? 'right' : 'left'}; font-size:11px; opacity:0.65; margin-top:5px; font-weight:500;">${getCurrentTimeString()}</div>`;
+}
+
+// Intercept response: use 'html' field so links are rendered as clickable hyperlinks
+chatElementRef.responseInterceptor = (response) => {
+  const timestamp = makeTimestampHTML(false);
+  if (response.html) {
+    return { html: response.html + timestamp };
+  }
+  // Fallback: convert any plain [text](url) patterns in the text field
+  if (response.text) {
+    const linkedText = response.text.replace(
+      /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:#0056b3;font-weight:600;text-decoration:underline;">$1</a>'
+    );
+    return { html: `<span style="white-space:pre-wrap;">${linkedText}</span>` + timestamp };
+  }
+  return response;
+};
+
+// Use MutationObserver to inject timestamps into user message bubbles via shadow root
+function setupUserTimestampObserver() {
+  const tryObserve = () => {
+    const shadowRoot = chatElementRef.shadowRoot;
+    if (!shadowRoot) {
+      setTimeout(tryObserve, 500);
+      return;
+    }
+    
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType !== Node.ELEMENT_NODE) return;
+          
+          // Identify user message bubbles
+          // The library uses .user-bubble or classes containing 'user' for user messages
+          const isUserContainer = node.classList && (
+            node.classList.contains('user-message-outer-container-position') ||
+            Array.from(node.classList).some(c => c.includes('user'))
+          );
+          
+          let targetBubble = null;
+          if (isUserContainer) {
+            targetBubble = node.querySelector('[class*="bubble"]');
+          } else if (node.classList && Array.from(node.classList).some(c => c.includes('bubble'))) {
+            const parent = node.closest('[class*="outer-message"]');
+            if (parent && Array.from(parent.classList).some(c => c.includes('user'))) {
+              targetBubble = node;
+            }
+          }
+
+          // Guard against infinity loop: check if already processed
+          if (targetBubble && !targetBubble.hasAttribute('data-timestamp-added')) {
+            targetBubble.setAttribute('data-timestamp-added', 'true');
+            const ts = document.createElement('div');
+            ts.className = 'user-timestamp';
+            ts.style.cssText = 'text-align:right; font-size:11px; opacity:0.75; margin-top:4px; font-weight:500; color:#cce0ff;';
+            ts.textContent = getCurrentTimeString();
+            targetBubble.appendChild(ts);
+          }
+        });
+      });
+    });
+    
+    observer.observe(shadowRoot, { childList: true, subtree: true });
+  };
+  tryObserve();
+}
+setupUserTimestampObserver();
+
 
 // Widget Toggle Logic
 const toggleBtn = document.getElementById('chat-toggle-btn');
