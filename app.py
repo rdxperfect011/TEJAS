@@ -6,6 +6,55 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from nltk.chunk import ne_chunk
+from nltk.tag import pos_tag
+from collections import Counter
+import string
+
+# Download required NLTK data
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
+
+try:
+    nltk.data.find('tokenizers/punkt_tab')
+except LookupError:
+    nltk.download('punkt_tab')
+
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords')
+
+try:
+    nltk.data.find('corpora/wordnet')
+except LookupError:
+    nltk.download('wordnet')
+
+try:
+    nltk.data.find('taggers/averaged_perceptron_tagger')
+except LookupError:
+    nltk.download('averaged_perceptron_tagger')
+
+try:
+    nltk.data.find('taggers/averaged_perceptron_tagger_eng')
+except LookupError:
+    nltk.download('averaged_perceptron_tagger_eng')
+
+try:
+    nltk.data.find('chunkers/maxent_ne_chunker')
+except LookupError:
+    nltk.download('maxent_ne_chunker')
+
+try:
+    nltk.data.find('corpora/words')
+except LookupError:
+    nltk.download('words')
 
 # Import database and site directory modules
 from database import get_database, log_query, log_response, cache_notification, get_cached_notification, track_popular_query, log_error
@@ -18,6 +67,189 @@ app = Flask(__name__)
 
 # Load API Key (Checking both names just in case)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("VITE_API_KEY")
+
+# Initialize NLP components
+lemmatizer = WordNetLemmatizer()
+stop_words = set(stopwords.words('english'))
+
+# Academic and JKBOTE-specific terms to preserve
+JKBOTE_TERMS = {
+    'jkbote', 'polytechnic', 'diploma', 'examination', 'semester', 'result', 
+    'notification', 'notice', 'datesheet', 'admission', 'form', 'application',
+    'nep', 'scheme', 'session', 'mj', 'nd', 'iti', 'scvt', 'migration',
+    'readmission', 'branch', 'college', 'fee', 'payment', 'registration'
+}
+
+class NLPProcessor:
+    """Natural Language Processing for enhanced query understanding"""
+    
+    def __init__(self):
+        self.lemmatizer = lemmatizer
+        self.stop_words = stop_words - JKBOTE_TERMS  # Remove JKBOTE terms from stopwords
+    
+    def preprocess_query(self, query):
+        """Clean and preprocess user query with fallback"""
+        try:
+            # Convert to lowercase
+            query = query.lower()
+            
+            # Remove punctuation but keep important symbols
+            query = re.sub(r'[^\w\s\-/]', ' ', query)
+            
+            # Tokenize
+            tokens = word_tokenize(query)
+            
+            # Remove stopwords but keep JKBOTE terms
+            tokens = [token for token in tokens if token not in self.stop_words]
+            
+            # Lemmatize
+            tokens = [self.lemmatizer.lemmatize(token) for token in tokens]
+            
+            return tokens
+        except Exception as e:
+            # Fallback to simple tokenization
+            query = query.lower()
+            query = re.sub(r'[^\w\s\-/]', ' ', query)
+            tokens = query.split()
+            # Remove common stopwords manually
+            simple_stopwords = {'the', 'is', 'at', 'which', 'on', 'and', 'a', 'to', 'for', 'are', 'as'}
+            tokens = [token for token in tokens if token not in simple_stopwords and len(token) > 1]
+            return tokens
+    
+    def extract_entities(self, query):
+        """Extract named entities from query with fallback"""
+        try:
+            tokens = word_tokenize(query)
+            pos_tags = pos_tag(tokens)
+            entities = ne_chunk(pos_tags)
+            
+            extracted_entities = []
+            for chunk in entities:
+                if hasattr(chunk, 'label'):
+                    entity_name = ' '.join(c[0] for c in chunk)
+                    extracted_entities.append({
+                        'name': entity_name,
+                        'type': chunk.label()
+                    })
+            return extracted_entities
+        except Exception as e:
+            # Fallback to simple pattern matching
+            entities = []
+            # Extract numbers that might be semester numbers
+            numbers = re.findall(r'\b\d+\b', query)
+            for num in numbers:
+                entities.append({'name': num, 'type': 'NUMBER'})
+            return entities
+    
+    def extract_semester_info(self, tokens):
+        """Extract semester information from tokens"""
+        semester_info = {'semester': None, 'year': None}
+        
+        for i, token in enumerate(tokens):
+            if token in ['semester', 'sem']:
+                # Look for semester number
+                if i + 1 < len(tokens) and tokens[i + 1].isdigit():
+                    semester_info['semester'] = tokens[i + 1]
+                elif i - 1 >= 0 and tokens[i - 1].isdigit():
+                    semester_info['semester'] = tokens[i - 1]
+        
+        return semester_info
+    
+    def extract_session_info(self, tokens):
+        """Extract session information (MJ/ND + year)"""
+        session_patterns = [
+            r'(mj|nd)(\d{2})',
+            r'(march|june|november|december)\s*(\d{4})',
+            r'(\d{4})\s*(session)'
+        ]
+        
+        query_text = ' '.join(tokens)
+        for pattern in session_patterns:
+            match = re.search(pattern, query_text)
+            if match:
+                return match.group(0)
+        
+        return None
+    
+    def classify_query_type(self, tokens):
+        """Classify the type of query"""
+        query_lower = ' '.join(tokens).lower()
+        
+        query_types = {
+            'result': ['result', 'marksheet', 'grade', 'score', 'pass', 'fail'],
+            'admission': ['admission', 'apply', 'application', 'register', 'prereg'],
+            'examination': ['exam', 'examination', 'test', 'datesheet', 'schedule'],
+            'form': ['form', 'application', 'fill', 'submit', 'online'],
+            'notification': ['notification', 'notice', 'announcement', 'latest', 'new'],
+            'syllabus': ['syllabus', 'curriculum', 'subject', 'course'],
+            'contact': ['contact', 'phone', 'email', 'address', 'help'],
+            'fee': ['fee', 'payment', 'pay', 'cost', 'charge']
+        }
+        
+        for query_type, keywords in query_types.items():
+            if any(keyword in query_lower for keyword in keywords):
+                return query_type
+        
+        return 'general'
+    
+    def enhance_query_search(self, original_query):
+        """Enhance query with synonyms and related terms"""
+        tokens = self.preprocess_query(original_query)
+        
+        # Synonym mappings
+        synonyms = {
+            'exam': ['examination', 'test', 'assessment'],
+            'form': ['application', 'apply', 'registration'],
+            'result': ['marksheet', 'grade', 'score', 'outcome'],
+            'notice': ['notification', 'announcement', 'circular'],
+            'date': ['schedule', 'timeline', 'deadline']
+        }
+        
+        enhanced_tokens = tokens.copy()
+        for token in tokens:
+            if token in synonyms:
+                enhanced_tokens.extend(synonyms[token])
+        
+        return enhanced_tokens, tokens
+    
+    def calculate_query_intent(self, original_query):
+        """Calculate the intent and key entities of the query"""
+        tokens = self.preprocess_query(original_query)
+        entities = self.extract_entities(original_query)
+        semester_info = self.extract_semester_info(tokens)
+        session_info = self.extract_session_info(tokens)
+        query_type = self.classify_query_type(tokens)
+        enhanced_tokens, original_tokens = self.enhance_query_search(original_query)
+        
+        return {
+            'original_query': original_query,
+            'processed_tokens': original_tokens,
+            'enhanced_tokens': enhanced_tokens,
+            'entities': entities,
+            'semester_info': semester_info,
+            'session_info': session_info,
+            'query_type': query_type,
+            'confidence': self._calculate_confidence(tokens, query_type)
+        }
+    
+    def _calculate_confidence(self, tokens, query_type):
+        """Calculate confidence score for query classification"""
+        type_keywords = {
+            'result': ['result', 'marksheet', 'grade'],
+            'admission': ['admission', 'apply', 'application'],
+            'examination': ['exam', 'examination', 'test'],
+            'form': ['form', 'application', 'fill'],
+            'notification': ['notification', 'notice', 'new']
+        }
+        
+        if query_type in type_keywords:
+            matches = sum(1 for token in tokens if token in type_keywords[query_type])
+            return min(matches / len(tokens), 1.0)
+        
+        return 0.5
+
+# Initialize NLP processor
+nlp_processor = NLPProcessor()
 
 # Move recency scoring function outside of chat endpoint for better organization
 def get_recency_score(doc):
@@ -265,13 +497,34 @@ def chat():
     if not messages:
         return jsonify({"text": "No messages provided."})
 
-    last_user_message = messages[-1].get("text", "").lower()
+    last_user_message = messages[-1].get("text", "")
+    
+    # Process query with NLP for enhanced understanding
+    query_intent = nlp_processor.calculate_query_intent(last_user_message)
+    
+    # Use enhanced tokens for better search
+    enhanced_search_query = ' '.join(query_intent['enhanced_tokens'])
+    
+    print(f"Original: {query_intent['original_query']}")
+    print(f"Type: {query_intent['query_type']}")
+    print(f"Enhanced: {enhanced_search_query}")
+    print(f"Semester: {query_intent['semester_info']}")
+    print(f"Session: {query_intent['session_info']}")
 
     # ----------------------------------------------------------------
-    # Use imported site directory from site_directory.py
+    # Use imported site directory from site_directory.py with NLP-enhanced query
     # ----------------------------------------------------------------
     from site_directory import get_target_urls
-    target_urls = get_target_urls(last_user_message)
+    target_urls = get_target_urls(enhanced_search_query)
+    
+    # Add additional URLs based on NLP analysis
+    if query_intent['query_type'] == 'result':
+        target_urls.update(["https://examination.jkbote.ac.in/resulthomenep.php", 
+                           "https://examination.jkbote.ac.in/resulthome.php"])
+    elif query_intent['query_type'] == 'form':
+        target_urls.update(["https://jkbote.ac.in/noticeExam.php"])
+    elif query_intent['query_type'] == 'admission':
+        target_urls.update(["https://jkbote.ac.in/prereg/"])
 
     all_links = []
     seen_urls = set()
@@ -299,17 +552,41 @@ def chat():
                     all_links.append({"text": text, "href": href})
                     seen_urls.add(href)
 
-    query_words = set(re.findall(r'\w+', last_user_message.lower()))
+    query_words = set(re.findall(r'\w+', enhanced_search_query.lower()))
     
-    def score_link(link):
+    # Enhanced relevance scoring with NLP insights
+    def enhanced_score_link(link):
         link_text_lower = link["text"].lower()
         score = 0
+        
+        # Base keyword matching
         for w in query_words:
             if w in link_text_lower and len(w) > 2:
                 score += 1
+        
+        # Boost scores based on NLP analysis
+        if query_intent['query_type'] == 'form' and 'form' in link_text_lower:
+            score += 3
+        if query_intent['query_type'] == 'result' and 'result' in link_text_lower:
+            score += 3
+        if query_intent['query_type'] == 'examination' and 'exam' in link_text_lower:
+            score += 3
+            
+        # Semester-specific boosting
+        if query_intent['semester_info']['semester']:
+            sem_num = query_intent['semester_info']['semester']
+            if f"{sem_num}" in link_text_lower or f"{sem_num}th" in link_text_lower:
+                score += 5
+                
+        # Session-specific boosting
+        if query_intent['session_info']:
+            session = query_intent['session_info'].lower()
+            if session in link_text_lower:
+                score += 4
+                
         return score
     
-    all_links.sort(key=score_link, reverse=True)
+    all_links.sort(key=enhanced_score_link, reverse=True)
     top_links = all_links[:10]
     
     # Enhanced notification reading with better content matching
@@ -395,25 +672,37 @@ def chat():
     # Build the known-URL reference block for the system prompt
     site_directory = JKBOTE_SITE_DIRECTORY
 
-    # Build system instruction
+    # Build system instruction with NLP insights
     system_instruction = f"""You are a helpful assistant for JKBOTE (Jammu & Kashmir Board of Technical Education). 
     Your role is to help students find information from official JKBOTE sources.
 
     JKBOTE OFFICIAL SITE DIRECTORY:
     {site_directory}
 
+    NLP ANALYSIS OF USER QUERY:
+    - Original Query: {query_intent['original_query']}
+    - Query Type: {query_intent['query_type']} (Confidence: {query_intent['confidence']:.2f})
+    - Semester Info: {query_intent['semester_info']}
+    - Session Info: {query_intent['session_info']}
+    - Key Entities: {query_intent['entities']}
+
     TASK: Read the latest notifications from JKBOTE, find the most relevant ones for the user's query, 
     extract specific details, and provide direct links to the exact notifications.
 
-    USER QUERY: {last_user_message}
+    ENHANCED UNDERSTANDING: Use the NLP analysis above to better understand what the user wants.
+    - If query_type is 'form', prioritize examination forms and application links
+    - If query_type is 'result', prioritize result portals and marksheet links  
+    - If semester info is available, prioritize that specific semester
+    - If session info is available, prioritize that session (MJ/ND)
 
     STEPS:
     1. Read the provided notifications with content
     2. Find the MOST RELEVANT notifications that directly answer the user's question
     3. Extract specific details: exact dates, deadlines, fees, requirements
     4. Prioritize recent notifications (2026 > 2025 > older)
-    5. If multiple relevant notifications exist, list them in order of relevance
-    6. Always provide the DIRECT link to the specific notification, not general pages
+    5. Use NLP insights to match user intent more accurately
+    6. If multiple relevant notifications exist, list them in order of relevance
+    7. Always provide the DIRECT link to the specific notification, not general pages
 
     ANSWER FORMAT:
     - Start with the most direct answer to the user's question
@@ -426,6 +715,7 @@ def chat():
     - Don't send users to general notification pages if a specific document exists
     - Prioritize PDF links for official forms/notices
     - Always include direct links with descriptions
+    - Use the NLP analysis to provide more targeted responses
     """
     
     # Add notification data to system instruction if available
