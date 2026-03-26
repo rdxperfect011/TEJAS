@@ -137,17 +137,7 @@ chatElementRef.request = {
 
 // Intercept outgoing request to match backend expected format
 chatElementRef.requestInterceptor = (requestDetails) => {
-  const history = chatElementRef.history || [];
-  const messages = history
-    .filter(m => m.text || m.html)
-    .map(m => ({
-      role: m.role === 'ai' ? 'ai' : 'user',
-      text: m.text || ''
-    }));
-  // Add the current user message
-  if (requestDetails.body && requestDetails.body.messages) {
-    requestDetails.body = { messages: requestDetails.body.messages };
-  }
+  // Just pass through the current message without history to avoid conflicts
   return requestDetails;
 };
 
