@@ -41,6 +41,29 @@ JKBOTE OFFICIAL SITE DIRECTORY (jkbote.ac.in) — use these exact URLs when citi
 • Syllabus 4th Sem                : https://jkbote.ac.in/4thSemester.pdf
 • Syllabus 5th Sem                : https://jkbote.ac.in/5thSemester.pdf
 • Syllabus 6th Sem                : https://jkbote.ac.in/6thSemester.pdf
+
+FEE DETAILS & PAYMENT OPTIONS:
+• Official Fee Payment Portal     : https://pages.razorpay.com/pl_ODQaumm5UoxmrH/view
+• Known Fee Amounts               : 
+  - Readmission: Rs 500/-
+  - Branch Change in same college: Rs 4000/-
+  - Issuance of duplicate marks certificate: Rs 65.00 /semester
+  - Correction in name: Rs 65.00 /semester
+  - Duplicate Correction in Diploma Certificate: Rs 650/-
+  - Verification of certificates: Rs 500/-
+  - Migration from one college to another in the same branch: Rs 4000/-
+  - Migration along with branch change: Rs 5000/-
+  - Exam Center Change: Rs 500/-
+  - Admission fee: Rs 100/-
+  - Confidential Result: Rs 500/-
+• Accepted Payment Types          : Readmission, Branch Change, Duplicate Certificate, Migration from one college to another, Name Change / Corrections, Verifications, Mercy Chance, Exam Center Change, Late Fee, Confidential Result, Migration Certificate, Admission Fee, Transcript Certificate Fee, Migration Fee, Other Fee.
+
+MIGRATION PROCESS & CERTIFICATES:
+• 3-Year Diploma Passouts Migration Certificate: Students must apply online and verify via OTP at the Migration Portal: https://jkbote.ac.in/Migration/
+• For College-to-College Migration (same branch): Pay the Rs 4000/- fee at https://pages.razorpay.com/pl_ODQaumm5UoxmrH/view
+• For College-to-College Migration (with branch change): Pay the Rs 5000/- fee at https://pages.razorpay.com/pl_ODQaumm5UoxmrH/view
+• DO NOT suggest emailing the secretary/registrar or calling phone numbers for migration; ALWAYS direct them to the online links above.
+
 Office: Central — Old Secretariat Block A/C, Srinagar 190001 | Jammu Div — Bikram Chowk, Jammu 180004
 Phone: 0191-2430650 | Email: jkbote2002@gmail.com
 """
@@ -131,9 +154,14 @@ KEYWORD_MAP = {
     "honour":           ["https://jkbote.ac.in/honorBoard.php"],
     "rti":              ["https://jkbote.ac.in/RTI.php"],
     "committee":        ["https://jkbote.ac.in/Committee.php"],
-    "fee":              ["https://jkbote.ac.in/about.php"],
+    "fee":              ["https://pages.razorpay.com/pl_ODQaumm5UoxmrH/view", "https://jkbote.ac.in/about.php"],
     "fee structure":    ["https://jkbote.ac.in/about.php"],
-    "pay":              ["https://jkbote.ac.in/about.php"],
+    "pay":              ["https://pages.razorpay.com/pl_ODQaumm5UoxmrH/view", "https://jkbote.ac.in/about.php"],
+    "payment":          ["https://pages.razorpay.com/pl_ODQaumm5UoxmrH/view"],
+    "readmission":      ["https://pages.razorpay.com/pl_ODQaumm5UoxmrH/view", "https://jkbote.ac.in/", "https://jkbote.ac.in/notice.php"],
+    "duplicate certificate": ["https://pages.razorpay.com/pl_ODQaumm5UoxmrH/view"],
+    "mercy chance":     ["https://pages.razorpay.com/pl_ODQaumm5UoxmrH/view"],
+    "transcript":       ["https://pages.razorpay.com/pl_ODQaumm5UoxmrH/view"],
     
     # Contact
     "contact":          ["https://jkbote.ac.in/contact.php"],

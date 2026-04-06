@@ -399,16 +399,7 @@ def is_navigation_text(text):
     # Only filter if it's EXACTLY a navigation term AND very short
     return text_lower in nav_keywords and len(text) < 20
 
-def deduplicate_urls(text):
-    """Remove duplicate URLs from AI response, keeping only the first occurrence."""
-    seen = set()
-    def replace_if_seen(m):
-        url = m.group(0)
-        if url in seen:
-            return ''  # Remove this duplicate URL
-        seen.add(url)
-        return url
-    return re.sub(r'https?://[^\s)>"]+', replace_if_seen, text)
+
 
 def markdown_to_html(text):
     """Convert Gemini markdown output to safe HTML with clickable hyperlinks."""
@@ -746,8 +737,9 @@ def chat():
             ai_text = re.sub(r'https?://vertexaisearch\.cloud\.google\.com/[^\s)]+', '', ai_text)
             # Remove any trailing empty citations like [1] [2] or (Source: ) that might point to the deleted links
             ai_text = re.sub(r'\[\d+\]', '', ai_text)
-            # Deduplicate URLs — if Gemini repeats the same link, only keep the first mention
-            ai_text = deduplicate_urls(ai_text)
+            
+            # Fix markdown escaping of underscores in URLs
+            ai_text = ai_text.replace(r'\_', '_')
             
             ai_html = markdown_to_html(ai_text)
             return jsonify({"html": ai_html})
