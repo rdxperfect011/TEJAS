@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import re
+import concurrent.futures
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify, send_from_directory
@@ -502,17 +503,16 @@ def chat():
     all_links = []
     seen_urls = set()
 
-    # Limit to 3 pages to avoid too long processing
-    for url in list(target_urls)[:3]:
-        html = fetch_with_retry(url)
+    # Fetch top 3 pages in parallel to reduce lag
+    def scan_url_for_links(url):
+        found_links = []
+        html = fetch_with_retry(url, retries=1, timeout=5)
         if html:
             soup = BeautifulSoup(html, "html.parser")
             for a in soup.find_all("a", href=True):
                 href = urljoin(url, a["href"])
                 text = a.text.replace("(NEW)", "").strip()
                 
-                # Allow: JKBOTE domains + jksbotelive.com + Google Drive
-                # (All datesheets/results are hosted as Google Drive PDFs)
                 is_allowed = (
                     "jkbote.ac.in" in href.lower() or
                     "jksbotelive.com" in href.lower() or
@@ -521,9 +521,16 @@ def chat():
                 if not is_allowed:
                     continue
 
-                if len(text) > 8 and href not in seen_urls and not href.startswith(("javascript:", "mailto:", "tel:")):
-                    all_links.append({"text": text, "href": href})
-                    seen_urls.add(href)
+                if len(text) > 8 and not href.startswith(("javascript:", "mailto:", "tel:")):
+                    found_links.append({"text": text, "href": href})
+        return found_links
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        for links in executor.map(scan_url_for_links, list(target_urls)[:3]):
+            for link in links:
+                if link["href"] not in seen_urls:
+                    all_links.append(link)
+                    seen_urls.add(link["href"])
 
     query_words = set(re.findall(r'\w+', enhanced_search_query.lower()))
     
@@ -570,58 +577,56 @@ def chat():
         # Extract content from top links for better summarization
         processed_documents = []
         
-        for link in top_links[:8]:  # Process more links for better matching
+        def process_top_link(link):
             if link["href"].endswith('.pdf') or "drive.google.com" in link["href"]:
-                # For PDFs and Google Drive links, extract title and check relevance
                 title_lower = link['text'].lower()
                 relevance_score = 0
-                
-                # Check for exact matches first
-                if '6th' in title_lower and 'form' in title_lower:
-                    relevance_score += 10
-                if 'online' in title_lower and 'examination' in title_lower:
-                    relevance_score += 8
-                if 'semester' in title_lower and 'form' in title_lower:
-                    relevance_score += 6
-                if '6th' in title_lower:
-                    relevance_score += 3
-                if 'form' in title_lower:
-                    relevance_score += 3
-                if 'online' in title_lower:
-                    relevance_score += 2
-                if 'examination' in title_lower:
-                    relevance_score += 2
+                if '6th' in title_lower and 'form' in title_lower: relevance_score += 10
+                if 'online' in title_lower and 'examination' in title_lower: relevance_score += 8
+                if 'semester' in title_lower and 'form' in title_lower: relevance_score += 6
+                if '6th' in title_lower: relevance_score += 3
+                if 'form' in title_lower: relevance_score += 3
+                if 'online' in title_lower: relevance_score += 2
+                if 'examination' in title_lower: relevance_score += 2
                     
                 if relevance_score > 0:
-                    processed_documents.append({
+                    return {
                         'title': link['text'],
                         'content': f"Document: {link['text']} (Direct link to official notification)",
                         'dates': [],
                         'href': link['href'],
                         'relevance_score': relevance_score
-                    })
+                    }
+                return None
             else:
-                # Use the document extraction function
-                doc_data = extract_document_content(link["href"], link["text"])
+                doc_data = get_cached_notification(link["href"])
+                if not doc_data:
+                    doc_data = extract_document_content(link["href"], link["text"])
+                    if doc_data:
+                        cache_notification(link["href"], doc_data['title'], doc_data['content'], doc_data['dates'])
+                
                 if doc_data:
-                    # Calculate relevance score based on query keywords
                     content_lower = doc_data['content'].lower()
                     title_lower = doc_data['title'].lower()
                     relevance_score = 0
-                    
-                    # Check for query-specific keywords
                     query_keywords = ['6th', 'semester', 'form', 'online', 'examination', '2026']
                     for keyword in query_keywords:
                         if keyword in content_lower or keyword in title_lower:
                             relevance_score += 1
                     
-                    processed_documents.append({
+                    return {
                         'title': doc_data['title'],
                         'content': doc_data['content'],
                         'dates': doc_data['dates'],
                         'href': link['href'],
                         'relevance_score': relevance_score
-                    })
+                    }
+                return None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            for result in executor.map(process_top_link, top_links[:8]):
+                if result:
+                    processed_documents.append(result)
         
         # Sort by relevance score first, then by recency
         processed_documents.sort(key=lambda x: (x['relevance_score'], get_recency_score(x)), reverse=True)
@@ -706,31 +711,40 @@ def chat():
         }
     }
 
-    try:
-        response = requests.post(gemini_url, json=gemini_payload, headers={"Content-Type": "application/json"})
-        response.raise_for_status()
-        data = response.json()
-        
-        if "candidates" in data and len(data["candidates"]) > 0:
-            ai_text = data["candidates"][0]["content"]["parts"][0]["text"]
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(gemini_url, json=gemini_payload, headers={"Content-Type": "application/json"}, timeout=20)
+            response.raise_for_status()
+            data = response.json()
             
-            # Post-processing: Remove vertexaisearch links or other undesirable links
-            # We explicitly target the vertexaisearch redirect links often added by Google Search grounding
-            ai_text = re.sub(r'https?://vertexaisearch\.cloud\.google\.com/[^\s)]+', '', ai_text)
-            # Remove any trailing empty citations like [1] [2] or (Source: ) that might point to the deleted links
-            ai_text = re.sub(r'\[\d+\]', '', ai_text)
-            
-            # Fix markdown escaping of underscores in URLs
-            ai_text = ai_text.replace(r'\_', '_')
-            
-            ai_html = markdown_to_html(ai_text)
-            return jsonify({"html": ai_html})
-        else:
-            return jsonify({"text": "I'm sorry, I couldn't generate a response."})
-            
-    except Exception as e:
-        print("Gemini API Error:", e)
-        return jsonify({"error": "Failed to connect to the Gemini API."})
+            if "candidates" in data and len(data["candidates"]) > 0:
+                ai_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                
+                # Post-processing: Remove vertexaisearch links or other undesirable links
+                # We explicitly target the vertexaisearch redirect links often added by Google Search grounding
+                ai_text = re.sub(r'https?://vertexaisearch\.cloud\.google\.com/[^\s)]+', '', ai_text)
+                # Remove any trailing empty citations like [1] [2] or (Source: ) that might point to the deleted links
+                ai_text = re.sub(r'\[\d+\]', '', ai_text)
+                
+                # Fix markdown escaping of underscores in URLs
+                ai_text = ai_text.replace(r'\_', '_')
+                
+                ai_html = markdown_to_html(ai_text)
+                return jsonify({"html": ai_html})
+            else:
+                return jsonify({"text": "I'm sorry, I couldn't generate a response."})
+                
+        except requests.exceptions.HTTPError as e:
+            if response.status_code in [500, 502, 503, 504] and attempt < max_retries - 1:
+                print(f"Gemini API {response.status_code} error, retrying in {2 ** attempt} seconds...")
+                time.sleep(2 ** attempt)
+                continue
+            print("Gemini API Error:", e)
+            return jsonify({"error": f"Gemini API Error: {response.status_code}"})
+        except Exception as e:
+            print("Gemini API Error:", e)
+            return jsonify({"error": "Failed to connect to the Gemini API."})
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5010)
+    app.run(debug=True, port=5010, threaded=True)
