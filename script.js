@@ -227,15 +227,26 @@ let isOpen = false;
 
 toggleBtn.addEventListener('click', () => {
   isOpen = !isOpen;
+  const defaultIcon = document.querySelector('.default-icon');
+  const closeIcon = document.querySelector('.close-icon');
+
   if (isOpen) {
     widgetContainer.classList.add('show-widget');
-    toggleBtn.innerHTML = '✕';
-    toggleBtn.style.fontSize = '24px';
+    if (defaultIcon && closeIcon) {
+      defaultIcon.style.display = 'none';
+      closeIcon.style.display = 'block';
+    } else {
+      toggleBtn.innerHTML = '✕';
+    }
     // Hide tooltip entirely once interacted
     if (tooltip) tooltip.style.display = 'none';
   } else {
     widgetContainer.classList.remove('show-widget');
-    toggleBtn.innerHTML = '💬';
-    toggleBtn.style.fontSize = '28px';
+    if (defaultIcon && closeIcon) {
+      defaultIcon.style.display = 'block';
+      closeIcon.style.display = 'none';
+    } else {
+      toggleBtn.innerHTML = '💬';
+    }
   }
 });

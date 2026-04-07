@@ -715,7 +715,7 @@ def chat():
     elif latest_notifications_str:
         system_instruction += f"\n\nRELEVANT LINKS FOUND:\n{latest_notifications_str}\n\nIMPORTANT: Prioritize the most recent notifications and dates."
 
-    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     gemini_payload = {
         "contents": contents,
         "systemInstruction": {
