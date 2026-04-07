@@ -12,8 +12,11 @@ import os
 class TEJASDatabase:
     """Database handler for TEJAS chatbot"""
     
-    def __init__(self, db_path: str = "tejas_chatbot.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: str = None):
+        if db_path is None:
+            self.db_path = "/tmp/tejas_chatbot.db" if os.environ.get("VERCEL") else "tejas_chatbot.db"
+        else:
+            self.db_path = db_path
         self.init_database()
     
     def init_database(self):

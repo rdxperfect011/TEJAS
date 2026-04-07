@@ -15,46 +15,28 @@ from nltk.tag import pos_tag
 from collections import Counter
 import string
 
+# Configure NLTK data directory for Vercel
+nltk_data_dir = '/tmp/nltk_data' if os.environ.get("VERCEL") else None
+if nltk_data_dir:
+    nltk.data.path.append(nltk_data_dir)
+
 # Download required NLTK data
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
+packages = [
+    ('tokenizers', 'punkt'),
+    ('tokenizers', 'punkt_tab'),
+    ('corpora', 'stopwords'),
+    ('corpora', 'wordnet'),
+    ('taggers', 'averaged_perceptron_tagger'),
+    ('taggers', 'averaged_perceptron_tagger_eng'),
+    ('chunkers', 'maxent_ne_chunker'),
+    ('corpora', 'words')
+]
 
-try:
-    nltk.data.find('tokenizers/punkt_tab')
-except LookupError:
-    nltk.download('punkt_tab')
-
-try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('stopwords')
-
-try:
-    nltk.data.find('corpora/wordnet')
-except LookupError:
-    nltk.download('wordnet')
-
-try:
-    nltk.data.find('taggers/averaged_perceptron_tagger')
-except LookupError:
-    nltk.download('averaged_perceptron_tagger')
-
-try:
-    nltk.data.find('taggers/averaged_perceptron_tagger_eng')
-except LookupError:
-    nltk.download('averaged_perceptron_tagger_eng')
-
-try:
-    nltk.data.find('chunkers/maxent_ne_chunker')
-except LookupError:
-    nltk.download('maxent_ne_chunker')
-
-try:
-    nltk.data.find('corpora/words')
-except LookupError:
-    nltk.download('words')
+for category, pkg in packages:
+    try:
+        nltk.data.find(f'{category}/{pkg}')
+    except LookupError:
+        nltk.download(pkg, download_dir=nltk_data_dir)
 
 # Import database and site directory modules
 from database import get_database, log_query, log_response, cache_notification, get_cached_notification, track_popular_query, log_error
