@@ -63,6 +63,16 @@ class TEJASDatabase:
                 )
             ''')
             
+            # Query Response Cache table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS query_response_cache (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    normalized_query TEXT UNIQUE NOT NULL,
+                    response_html TEXT NOT NULL,
+                    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
             # Popular queries table for analytics
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS popular_queries (
@@ -86,6 +96,7 @@ class TEJASDatabase:
             # Create indexes for better performance
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_queries_timestamp ON user_queries(timestamp)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_cache_url ON notification_cache(url)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_query_cache_updated ON query_response_cache(last_updated)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_popular_count ON popular_queries(count DESC)')
             
             conn.commit()
@@ -149,6 +160,32 @@ class TEJASDatabase:
                     'last_updated': row[5]
                 }
         return None
+    
+    def get_cached_query_response(self, normalized_query: str, max_age_minutes: int = 60) -> Optional[str]:
+        """Get cached query response if available and recent"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT response_html
+                FROM query_response_cache 
+                WHERE normalized_query = ? AND last_updated > datetime('now', ?)
+            ''', (normalized_query, f'-{max_age_minutes} minutes'))
+            
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+        return None
+
+    def cache_query_response(self, normalized_query: str, response_html: str):
+        """Cache a generated query response"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO query_response_cache 
+                (normalized_query, response_html, last_updated)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            ''', (normalized_query, response_html))
+            conn.commit()
     
     def increment_popular_query(self, query_text: str):
         """Track popular queries for analytics"""
@@ -245,6 +282,12 @@ class TEJASDatabase:
                 WHERE timestamp < datetime('now', '-{} days')
             '''.format(days))
             
+            # Delete old query response cache
+            cursor.execute('''
+                DELETE FROM query_response_cache 
+                WHERE last_updated < datetime('now', '-2 days')
+            ''')
+            
             # Delete old cache entries
             cursor.execute('''
                 DELETE FROM notification_cache 
@@ -310,6 +353,14 @@ def cache_notification(url: str, title: str, content: str, dates: List[str], sco
 def get_cached_notification(url: str) -> Optional[Dict]:
     """Helper function to get cached notification"""
     return get_database().get_cached_notification(url)
+
+def get_cached_query(normalized_query: str, max_age_minutes: int = 60) -> Optional[str]:
+    """Helper function to get cached query response"""
+    return get_database().get_cached_query_response(normalized_query, max_age_minutes)
+
+def cache_query(normalized_query: str, response_html: str):
+    """Helper function to cache a query response"""
+    get_database().cache_query_response(normalized_query, response_html)
 
 def track_popular_query(query_text: str):
     """Helper function to track popular queries"""

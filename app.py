@@ -40,7 +40,7 @@ for category, pkg in packages:
         nltk.download(pkg, download_dir=nltk_data_dir)
 
 # Import database and site directory modules
-from database import get_database, log_query, log_response, cache_notification, get_cached_notification, track_popular_query, log_error
+from database import get_database, log_query, log_response, cache_notification, get_cached_notification, track_popular_query, log_error, get_cached_query, cache_query
 from site_directory import JKBOTE_SITE_DIRECTORY, KEYWORD_MAP, OFFICE_INFO, get_target_urls
 
 load_dotenv()
@@ -478,6 +478,13 @@ def chat():
     
     # Use enhanced tokens for better search
     enhanced_search_query = ' '.join(query_intent['enhanced_tokens'])
+    normalized_query = enhanced_search_query.lower()
+    
+    # Check query cache for similar queries (refreshing every 60 minutes)
+    cached_response = get_cached_query(normalized_query, max_age_minutes=60)
+    if cached_response:
+        print(f"Cache hit for query: {normalized_query}")
+        return jsonify({"html": cached_response})
     
     print(f"Original: {query_intent['original_query']}")
     print(f"Type: {query_intent['query_type']}")
@@ -731,6 +738,13 @@ def chat():
                 ai_text = ai_text.replace(r'\_', '_')
                 
                 ai_html = markdown_to_html(ai_text)
+                
+                # Cache the generated response
+                try:
+                    cache_query(normalized_query, ai_html)
+                except Exception as cache_error:
+                    print(f"Failed to cache generated response: {cache_error}")
+                    
                 return jsonify({"html": ai_html})
             else:
                 return jsonify({"text": "I'm sorry, I couldn't generate a response."})
