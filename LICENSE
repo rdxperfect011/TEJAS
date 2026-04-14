@@ -2,16 +2,20 @@ PROPRIETARY AND CONFIDENTIAL LICENSE
 
 Copyright (c) 2026 Tanmay Jamwal. All Rights Reserved.
 
-OWNERSHIP:
-The ownership of this software ("TEJAS Chatbot") belongs entirely and exclusively to Tanmay Jamwal.
+DEVELOPMENT AND OWNERSHIP:
+This software ("TEJAS Chatbot") was solely developed, designed, and built entirely by Tanmay Jamwal. The intellectual property and full ownership of this software belongs exclusively to Tanmay Jamwal.
 
 PERMITTED USE:
-This software is provided exclusively for the use of the Jammu & Kashmir Board of Technical Education (JKBOTE). No other entity, individual, or organization is permitted to use, copy, or deploy this software without explicit permission from the owner.
+This software was created specifically and exclusively for the official website of the Jammu & Kashmir Board of Technical Education (JKBOTE). Its use is strictly restricted to the official JKBOTE site and can ONLY be used for JKBOTE's institutional purposes. No other entity, individual, or organization is permitted to use, copy, deploy, or implement this software without explicit written permission from the owner.
 
-RESTRICTIONS:
-1. NON-EDITABLE: This software, its source code, and its associated documentation shall not be edited, modified, reproduced, or altered in any way.
-2. NO REDISTRIBUTION: You may not distribute, sub-license, rent, lease, or lend this software to any third party.
-3. NO REVERSE ENGINEERING: You may not reverse engineer, decompile, or disassemble the software.
+RESTRICTIONS (NON-EDITABLE AND NON-UPDATEABLE):
+1. NON-EDITABLE: This software, including its source code, assets, UI designs, and associated documentation, shall not be edited, modified, reproduced, or altered in any way by any party other than the original developer, Tanmay Jamwal.
+2. NON-UPDATEABLE: No unauthorized updates, patches, or modifications to the codebase or features are permitted. Only the original creator, Tanmay Jamwal, possesses the right to update or modify the system's architecture, data, and logic.
+3. NO REDISTRIBUTION: You may not distribute, sub-license, rent, lease, or lend this software to any third party under any circumstances.
+4. NO REVERSE ENGINEERING: You may not reverse engineer, decompile, or disassemble the software to derive its source code or structural logic.
+
+CONTEXT AND INTENT:
+TEJAS was comprehensively engineered as an advanced, AI-driven digital assistant tailored to streamline and enhance the student, faculty, and administrative experience within the JKBOTE ecosystem. The strictly proprietary nature of this software ensures that the system firmly maintains its integrity, data privacy, performance standards, and the specific functional requirements designed for JKBOTE without unauthorized interference, duplication, or replication.
 
 DISCLAIMER:
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR (TANMAY JAMWAL) BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
