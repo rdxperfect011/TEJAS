@@ -471,7 +471,11 @@ def chat():
     if not messages:
         return jsonify({"text": "No messages provided."})
 
-    last_user_message = messages[-1].get("text", "")
+    last_user_msg_obj = messages[-1]
+    last_user_message = last_user_msg_obj.get("text", "")
+    if not last_user_message and "html" in last_user_msg_obj:
+        soup_last = BeautifulSoup(last_user_msg_obj.get("html", ""), "html.parser")
+        last_user_message = soup_last.get_text(separator=" ").strip()
     
     # Process query with NLP for enhanced understanding
     query_intent = nlp_processor.calculate_query_intent(last_user_message)
@@ -648,11 +652,37 @@ def chat():
 
     latest_notifications_str = "\n".join([f'- [{lnk["text"]}]({lnk["href"]})' for lnk in relevant_links])
 
-    contents = []
+    # Normalize messages to extract text from both 'text' and 'html' fields
+    normalized_messages = []
     for msg in messages:
         role = "model" if msg.get("role") == "ai" else "user"
-        if "text" in msg:
-            contents.append({"role": role, "parts": [{"text": msg["text"]}]})
+        content = msg.get("text", "")
+        if not content and "html" in msg:
+            soup = BeautifulSoup(msg.get("html", ""), "html.parser")
+            # Remove timestamp div if it exists to avoid cluttering history
+            for ts in soup.find_all("div", style=lambda s: s and "text-align:right" in s and "font-size:11px" in s):
+                ts.decompose()
+            for ts in soup.find_all("div", style=lambda s: s and "text-align: left" in s and "font-size:11px" in s):
+                ts.decompose()
+            content = soup.get_text(separator=" ").strip()
+            
+        if content:
+            normalized_messages.append({"role": role, "text": content})
+
+    contents = []
+    for msg in normalized_messages:
+        role = msg["role"]
+        text = msg["text"]
+        
+        # Skip leading model messages (Gemini API requires starting with user)
+        if not contents and role == "model":
+            continue
+            
+        if contents and contents[-1]["role"] == role:
+            # Merge consecutive messages of the same role
+            contents[-1]["parts"][0]["text"] += "\n" + text
+        else:
+            contents.append({"role": role, "parts": [{"text": text}]})
 
     # Build the known-URL reference block for the system prompt
     site_directory = JKBOTE_SITE_DIRECTORY

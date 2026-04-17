@@ -162,9 +162,11 @@ class TEJASDatabase:
         return None
     
     def get_cached_query_response(self, normalized_query: str, max_age_minutes: int = 60) -> Optional[str]:
-        """Get cached query response if available and recent"""
+        """Get cached query response if available and recent (includes fuzzy matching for typos)"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            
+            # First, try exact match for speed
             cursor.execute('''
                 SELECT response_html
                 FROM query_response_cache 
@@ -174,6 +176,54 @@ class TEJASDatabase:
             row = cursor.fetchone()
             if row:
                 return row[0]
+                
+            # If no exact match, try fuzzy matching for spelling mistakes
+            cursor.execute('''
+                SELECT normalized_query, response_html
+                FROM query_response_cache 
+                WHERE last_updated > datetime('now', ?)
+            ''', (f'-{max_age_minutes} minutes',))
+            
+            all_cached = cursor.fetchall()
+            if all_cached:
+                import difflib
+                import re
+                
+                cached_queries = [r[0] for r in all_cached]
+                matches = difflib.get_close_matches(normalized_query, cached_queries, n=1, cutoff=0.85)
+                
+                if matches:
+                    closest_query = matches[0]
+                    
+                    # SAFETY GUARDS AGAINST SEMANTIC INTERFERENCE
+                    # 1. Ensure all numbers (both digits and text) match exactly
+                    text_nums = {'first': '1', 'second': '2', 'third': '3', 'fourth': '4', 'fifth': '5', 'sixth': '6'}
+                    def get_all_nums(s):
+                        nums = set(re.findall(r'\d+', s))
+                        words = set(re.findall(r'\b\w+\b', s.lower()))
+                        for w in words:
+                            if w in text_nums: nums.add(text_nums[w])
+                        return nums
+                    if get_all_nums(normalized_query) != get_all_nums(closest_query):
+                        return None
+                        
+                    # 2. Ensure JKBOTE session codes match exactly (prevents 'mj' matching 'nd')
+                    def get_sessions(s): return set(re.findall(r'(mj|nd)', s.lower()))
+                    if get_sessions(normalized_query) != get_sessions(closest_query):
+                        return None
+                        
+                    # 3. Ensure completely opposite/distinct critical keywords don't collapse
+                    critical_words = {'pass', 'fail', 'private', 'regular', 'polytechnic', 
+                                      'iti', 'result', 'syllabus', 'fee', 'form', 'admission'}
+                    def get_critical(s): return set(w for w in re.findall(r'\b\w+\b', s.lower()) if w in critical_words)
+                    if get_critical(normalized_query) != get_critical(closest_query):
+                        return None
+                        
+                    # If it passes all safety guards, return the cached result
+                    for r in all_cached:
+                        if r[0] == closest_query:
+                            return r[1]
+                            
         return None
 
     def cache_query_response(self, normalized_query: str, response_html: str):
@@ -285,7 +335,7 @@ class TEJASDatabase:
             # Delete old query response cache
             cursor.execute('''
                 DELETE FROM query_response_cache 
-                WHERE last_updated < datetime('now', '-2 days')
+                WHERE last_updated < datetime('now', '-1 day')
             ''')
             
             # Delete old cache entries
