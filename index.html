@@ -9,17 +9,28 @@
     <script type="module" src="tejas.js"></script>
   </head>
   <body>
-    <!-- Mock Webpage Content -->
-    <div class="brand-header">
-      <h1>Tejas Virtual Assistant Demo</h1>
-      <p>Scroll up and down to see how the floating widget behaves.</p>
-      <div style="margin-top: 20px;">
-        <a href="/forms" class="form-btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; margin-right: 10px;">6th Semester Forms</a>
+    <!-- Background Animation Elements -->
+    <div class="bg-animated">
+      <div class="bg-shape shape-1"></div>
+      <div class="bg-shape shape-2"></div>
+      <div class="bg-shape shape-3"></div>
+    </div>
+
+    <!-- Main Hero Section -->
+    <div class="hero-container">
+      <div class="glass-card text-center">
+        <img src="https://jkbote.ac.in/images/about/logo.jpg" alt="JKBOTE Logo" class="hero-logo" />
+        <h1 class="hero-title">Welcome to TEJAS</h1>
+        <p class="hero-subtitle">Your AI-Powered Assistant for the J&K Board of Technical Education</p>
+        <div class="hero-actions">
+          <button id="hero-chat-trigger" class="hero-btn primary-btn" onclick="document.getElementById('chat-toggle-btn').click();">Try the Chatbot</button>
+        </div>
       </div>
     </div>
-    <div class="mock-content" style="height: 150vh;">
-      <h2>Welcome to your Site</h2>
-      <p>The chatbot is located in the bottom right corner of the screen.</p>
+    
+    <div class="mock-content">
+      <h2>Explore Services</h2>
+      <p>Scroll down or open the chat widget in the bottom right corner to get started.</p>
     </div>
     
     <!-- Floating Tooltip -->

@@ -484,8 +484,15 @@ def chat():
     enhanced_search_query = ' '.join(query_intent['enhanced_tokens'])
     normalized_query = enhanced_search_query.lower()
     
-    # Check query cache for similar queries (refreshing every 60 minutes)
-    cached_response = get_cached_query(normalized_query, max_age_minutes=60)
+    # Determine if this is a follow-up conversation to avoid conversational cache collisions
+    user_message_count = sum(1 for msg in messages if msg.get("role") == "user")
+    is_follow_up = user_message_count > 1
+    
+    # Check query cache for similar queries (ONLY if it's the first question, refreshing every 24 hours)
+    cached_response = None
+    if not is_follow_up:
+        cached_response = get_cached_query(normalized_query, max_age_minutes=1440)
+        
     if cached_response:
         print(f"Cache hit for query: {normalized_query}")
         return jsonify({"html": cached_response})
@@ -769,11 +776,12 @@ def chat():
                 
                 ai_html = markdown_to_html(ai_text)
                 
-                # Cache the generated response
-                try:
-                    cache_query(normalized_query, ai_html)
-                except Exception as cache_error:
-                    print(f"Failed to cache generated response: {cache_error}")
+                # Cache the generated response if it is not a follow-up conversation
+                if not is_follow_up:
+                    try:
+                        cache_query(normalized_query, ai_html)
+                    except Exception as cache_error:
+                        print(f"Failed to cache generated response: {cache_error}")
                     
                 return jsonify({"html": ai_html})
             else:

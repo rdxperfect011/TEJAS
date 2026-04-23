@@ -4,13 +4,13 @@ const chatElementRef = document.getElementById('chat-element');
 chatElementRef.history = [
   {
     role: 'ai', 
-    html: `<div style="background: linear-gradient(135deg, #0056b3, #003366); color: #ffffff; padding: 16px; border-radius: 17px 17px 17px 3px; margin: -13px -17px;">
-      <div style="text-align: center; font-weight: 700; font-size: 16px; margin-bottom: 8px; letter-spacing: 0.5px;">✨ Welcome to TEJAS! ✨</div>
-      <div style="text-align: center; font-size: 13.5px; line-height: 1.5; color: #e6f2ff; opacity: 0.95;">I am your virtual assistant for <strong>JKBOTE</strong>, here to help navigate services and answer your questions.</div>
-      <div style="text-align: right; font-size: 11.5px; opacity: 0.85; margin-top: 8px; font-weight: 500; color: #d1e3ff;">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+    html: `<div style="background: linear-gradient(135deg, #0056b3, #003366); color: #ffffff; padding: 18px; border-radius: 20px 20px 20px 4px; margin: -13px -17px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+      <div style="text-align: center; font-weight: 700; font-size: 17px; margin-bottom: 8px; letter-spacing: 0.5px; background: linear-gradient(135deg, #66b2ff, #ffffff); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">✨ Welcome to TEJAS ✨</div>
+      <div style="text-align: center; font-size: 14px; line-height: 1.6; color: #e6f2ff; opacity: 0.95;">I am your virtual assistant for <strong>JKBOTE</strong>, here to help navigate services and answer your questions.</div>
+      <div style="text-align: right; font-size: 11px; opacity: 0.8; margin-top: 10px; font-weight: 500; color: #cce0ff;">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
     </div>`
   },
-  {role: 'ai', html: `<span style="white-space:pre-wrap;">Welcome to the official J&K Board of Technical Education (JKBOTE) portal! How can I assist you with your queries today? Try asking about "latest notifications", "admission forms", or any general questions.</span><div style="text-align:left; font-size:11px; opacity:0.65; margin-top:5px; font-weight:500;">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`},
+  {role: 'ai', html: `<span style="white-space:pre-wrap; color: #1a2c4d; font-size: 14.5px;">Welcome to the official J&K Board of Technical Education (JKBOTE) portal! How can I assist you with your queries today? Try asking about "latest notifications", "admission forms", or any general questions.</span><div style="text-align:left; font-size:11px; opacity:0.6; margin-top:6px; font-weight:500; color: #556b8d;">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`},
 ];
 
 // Ensure the AI label inside chat bubbles is named "TEJAS"
@@ -19,30 +19,31 @@ chatElementRef.names = {
     style: {
       fontSize: "12px",
       fontWeight: "600",
-      color: "#6b7280"
+      color: "#556b8d"
     }
   },
   ai: { 
     text: "TEJAS",
     style: {
       fontSize: "13px",
-      fontWeight: "600",
+      fontWeight: "700",
       color: "#003366",
-      marginBottom: "2px"
+      marginBottom: "4px"
     }
   }
 };
 
-// Dribbble-style UI configuration using JKBOTE colors
+// Premium UI configuration with JKBOTE colors
 chatElementRef.textInput = {
-  placeholder: {text: "Start typing..."},
+  placeholder: {text: "Type your message..."},
   styles: {
     container: {
       backgroundColor: "#f4f7fa",
-      borderRadius: "24px",
-      border: "1px solid transparent",
-      padding: "4px 14px",
-      margin: "12px"
+      borderRadius: "28px",
+      border: "1px solid #dce8fc",
+      padding: "6px 16px",
+      margin: "12px 14px",
+      boxShadow: "0 2px 10px rgba(0,0,0,0.02) inset"
     },
     text: {
       fontSize: "15px",
@@ -57,19 +58,19 @@ chatElementRef.submitButtonStyles = {
       default: {
         background: "linear-gradient(135deg, #0056b3, #003366)",
         borderRadius: "50%",
-        width: "36px",
-        height: "36px",
+        width: "38px",
+        height: "38px",
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
         margin: "6px 5px 6px 0",
-        boxShadow: "0 2px 8px rgba(0, 86, 179, 0.4)",
-        transition: "transform 0.15s ease, box-shadow 0.15s ease"
+        boxShadow: "0 4px 12px rgba(0, 86, 179, 0.3)",
+        transition: "transform 0.2s ease, box-shadow 0.2s ease"
       },
       hover: {
         background: "linear-gradient(135deg, #004494, #002244)",
-        transform: "scale(1.05)",
-        boxShadow: "0 4px 12px rgba(0, 86, 179, 0.5)"
+        transform: "scale(1.08)",
+        boxShadow: "0 6px 16px rgba(0, 86, 179, 0.4)"
       }
     },
     svg: {
@@ -90,9 +91,9 @@ chatElementRef.messageStyles = {
     shared: {
       bubble: {
         maxWidth: "85%",
-        fontSize: "14px",
-        lineHeight: "1.5",
-        padding: "12px 16px"
+        fontSize: "14.5px",
+        lineHeight: "1.55",
+        padding: "14px 18px"
       }
     },
     user: {
@@ -100,8 +101,8 @@ chatElementRef.messageStyles = {
         background: "linear-gradient(135deg, #0056b3, #003366)",
         color: "#ffffff",
         border: "none",
-        borderRadius: "18px 18px 4px 18px",
-        boxShadow: "0 4px 10px rgba(0, 86, 179, 0.15)"
+        borderRadius: "20px 20px 4px 20px",
+        boxShadow: "0 6px 15px rgba(0, 86, 179, 0.2)"
       }
     },
     ai: {
@@ -109,8 +110,8 @@ chatElementRef.messageStyles = {
         backgroundColor: "#f4f8ff",
         color: "#1a2c4d",
         border: "1px solid #dce8fc",
-        boxShadow: "0 4px 15px rgba(0, 86, 179, 0.05)",
-        borderRadius: "18px 18px 18px 4px"
+        boxShadow: "0 4px 15px rgba(0, 0, 0, 0.03)",
+        borderRadius: "20px 20px 20px 4px"
       }
     }
   }
