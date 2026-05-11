@@ -149,17 +149,17 @@ body {
   transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   
   border-radius: 24px;
-  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+  box-shadow: 0 16px 60px rgba(0, 26, 51, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;
   overflow: hidden;
   transform-origin: bottom right;
   width: calc(100vw - 50px);
   max-width: 400px;
   height: 650px;
   max-height: 85vh;
-  background-color: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255,255,255,0.5);
+  background-color: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  border: 1px solid rgba(220, 232, 252, 0.6);
 }
 
 #chat-widget-container.show-widget {
@@ -172,29 +172,31 @@ body {
 .widget-header {
   display: flex;
   align-items: center;
-  padding: 20px 24px;
-  background: linear-gradient(135deg, #003366 0%, #001a33 100%);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 22px 26px;
+  background: linear-gradient(135deg, #004488 0%, #001a33 100%);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
   border-top-left-radius: 24px;
   border-top-right-radius: 24px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
   z-index: 2;
+  position: relative;
 }
 .header-avatar-container {
   position: relative;
   margin-right: 15px;
 }
 .header-avatar-container img {
-  width: 45px;
-  height: 45px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 18px rgba(0, 170, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.95);
   background-color: white;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 .header-avatar-container:hover img {
   transform: scale(1.05);
+  box-shadow: 0 6px 22px rgba(0, 170, 255, 0.3);
 }
 .status-indicator {
   position: absolute;
@@ -363,6 +365,28 @@ tejas-chat {
 .widget-footer .team-names:hover {
   color: #0056b3;
   cursor: default;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgba(163, 194, 230, 0.5);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(163, 194, 230, 0.8);
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Mobile Device Adjustments */
