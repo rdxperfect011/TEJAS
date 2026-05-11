@@ -77,7 +77,7 @@ class TEJASDatabase:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS popular_queries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    query_text TEXT NOT NULL,
+                    query_text TEXT NOT NULL UNIQUE,
                     count INTEGER DEFAULT 1,
                     last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
                 )

@@ -1,9 +1,22 @@
 """
 JKBOTE Site Directory and Configuration
-Contains all JKBOTE site structure information, URLs, and mappings
+========================================
+Contains all JKBOTE site structure information, URLs, and keyword mappings
+used by the TEJAS chatbot to route queries to the correct official pages.
+
+Sections:
+  • JKBOTE_SITE_DIRECTORY – Human-readable site map injected into the Gemini
+    system prompt so the model can cite accurate, official URLs.
+  • KEYWORD_MAP            – Dict mapping query keywords to lists of target
+    URLs used for focused web-scraping before calling the LLM.
+  • OFFICE_INFO            – Structured office address / contact data.
+  • get_target_urls()      – Helper that resolves a free-text query into a
+    set of URLs to scrape.
 """
 
-# JKBOTE Site Structure (March 2026 crawl)
+# ── Site Directory (injected verbatim into the Gemini system prompt) ───────────
+# Update this string whenever JKBOTE restructures its website so that the
+# AI always cites current, reachable URLs.
 JKBOTE_SITE_DIRECTORY = """
 JKBOTE OFFICIAL SITE DIRECTORY (jkbote.ac.in) — use these exact URLs when citing sources:
 • Homepage / What's New notices   : https://jkbote.ac.in/
@@ -68,6 +81,19 @@ Office: Central — Old Secretariat Block A/C, Srinagar 190001 | Jammu Div — B
 Phone: 0191-2430650 | Email: jkbote2002@gmail.com
 """
 
+
+# ── Keyword → URL mapping ──────────────────────────────────────────────────────────────
+# Each entry maps a lowercase keyword (or phrase) to an ordered list of
+# JKBOTE URLs that are most likely to contain relevant information.
+# The scraper visits only the first 3 unique URLs from the resolved set,
+# so URLs listed first carry the highest priority.
+#
+# Conventions:
+#  • Include the homepage (https://jkbote.ac.in/) for categories where the
+#    "What's New" section is the primary source of recent notices.
+#  • Duplicate keys intentionally override earlier entries in the same
+#    section (Python last-wins semantics) – check for accidental duplicates
+#    when adding new entries.
 # Updated keyword mapping based on actual JKBOTE site structure analysis
 KEYWORD_MAP = {
     # Results - Based on homepage "What's New" section
@@ -214,7 +240,10 @@ KEYWORD_MAP = {
     "division":         ["https://jkbote.ac.in/", "https://jkbote.ac.in/noticeDatesheet.php"],
 }
 
-# JKBOTE office information
+# ── Office contact information ────────────────────────────────────────────────────────────
+# Structured representation of JKBOTE office locations and contact details.
+# Used by the chatbot when answering contact-related questions directly
+# without needing to scrape a web page.
 OFFICE_INFO = {
     "central": "Old Secretariat Block A 1st Floor / Block C 2nd Floor, Srinagar 190001",
     "kashmir": "Old Secretariat Block B Ground Floor, Srinagar 190001", 
@@ -223,9 +252,27 @@ OFFICE_INFO = {
     "email": "jkbote2002@gmail.com"
 }
 
-# Helper functions
+
+# ── URL resolver helper ──────────────────────────────────────────────────────────────
 def get_target_urls(query: str) -> set:
-    """Get target URLs based on query keywords"""
+    """
+    Resolve a free-text query into a set of JKBOTE URLs to scrape.
+
+    Iterates over every key in KEYWORD_MAP and adds the associated URLs
+    to the result set whenever the key appears as a substring of `query`.
+    The comparison is case-insensitive.
+
+    If no keyword matches (e.g. a completely unrecognised query), the
+    general notifications page is returned as a safe fallback so the
+    scraper always has at least one page to work with.
+
+    Args:
+        query: The pre-processed (lowercased, enhanced) query string from
+               the NLP pipeline.
+
+    Returns:
+        A set of fully-qualified URLs to scrape for relevant content.
+    """
     target_urls = set()
     query_lower = query.lower()
     

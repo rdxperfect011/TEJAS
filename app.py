@@ -1,7 +1,27 @@
+"""
+TEJAS – Technical Education Joint AI Assistant
+================================================
+Main Flask application for the JKBOTE AI chatbot.
+
+This module handles:
+  • HTTP routing and security middleware
+  • In-memory rate limiting
+  • NLP pre-processing of user queries
+  • Web-scraping of JKBOTE notification pages
+  • Gemini API integration and response post-processing
+  • Response caching and query logging via database.py
+
+Dependencies: Flask, BeautifulSoup4, NLTK, requests, python-dotenv
+Deploy target: Vercel (serverless) or any WSGI host
+"""
+
 import os
+import datetime
 import time
 import requests
 import re
+import html
+import threading
 import concurrent.futures
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
@@ -14,6 +34,7 @@ from nltk.stem import WordNetLemmatizer
 from nltk.chunk import ne_chunk
 from nltk.tag import pos_tag
 from collections import Counter
+import logging
 import string
 
 # Configure NLTK data directory for Vercel
@@ -47,6 +68,77 @@ load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# ── Production Security Configuration ────────────────────────────────────────
+app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB request size limit
+
+# Logging — suppress debug output in production
+LOG_LEVEL = logging.DEBUG if os.environ.get("FLASK_DEBUG") else logging.WARNING
+logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("tejas")
+
+# In-memory rate limiting (per IP, 60 requests per 60 seconds)
+_rate_store: dict = {}
+_rate_lock = threading.Lock()
+
+def is_rate_limited(ip: str, limit: int = 60, window: int = 60) -> bool:
+    """
+    Sliding-window rate limiter.
+
+    Keeps a list of request timestamps per IP address and evicts entries
+    older than `window` seconds on every call.  Returns True (blocked) when
+    the number of recent requests reaches `limit`.
+
+    Args:
+        ip:     Client IP address string.
+        limit:  Maximum allowed requests within the window.
+        window: Rolling time window in seconds.
+
+    Returns:
+        True if the client has exceeded the rate limit, False otherwise.
+    """
+    now = time.time()
+    with _rate_lock:  # Thread-safe access to the shared timestamp store
+        # Discard timestamps that have fallen outside the current window
+        timestamps = [t for t in _rate_store.get(ip, []) if now - t < window]
+        if len(timestamps) >= limit:
+            _rate_store[ip] = timestamps  # Persist the pruned list
+            return True
+        timestamps.append(now)           # Record this request
+        _rate_store[ip] = timestamps
+    return False
+
+@app.after_request
+def set_security_headers(response):
+    """
+    Attach security-hardening HTTP headers to every response.
+
+    Headers applied:
+      • X-Content-Type-Options   – prevents MIME-type sniffing
+      • X-Frame-Options          – blocks clickjacking via iframes
+      • Referrer-Policy          – limits referrer leakage on cross-origin requests
+      • Permissions-Policy       – disables unused browser APIs
+      • Strict-Transport-Security– enforces HTTPS (only on secure connections / Vercel)
+      • Content-Security-Policy  – restricts resource origins to trusted domains
+    """
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    # Only set HSTS over HTTPS or when deployed to Vercel (which always uses HTTPS)
+    if request.is_secure or os.environ.get("VERCEL"):
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https://jkbote.ac.in https://img.icons8.com; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none';"
+    )
+    return response
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Load API Key (Checking both names just in case)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("VITE_API_KEY")
@@ -241,7 +333,7 @@ def get_recency_score(doc):
         return 0
     
     import re
-    current_year = 2026
+    current_year = datetime.datetime.now().year
     score = 0
     
     for date_str in doc['dates']:
@@ -280,7 +372,22 @@ def get_recency_score(doc):
     return score
 
 def extract_document_content(url, title):
-    """Extract and clean content from a document URL with improved JKBOTE site structure understanding."""
+    """
+    Fetch and extract the main textual content from a JKBOTE page URL.
+
+    The function strips navigation/boilerplate elements, attempts several
+    CSS selectors that match known JKBOTE page structures, and falls back
+    to scanning all text-bearing tags.  Duplicate sentences are removed
+    before returning.
+
+    Args:
+        url:   Fully-qualified URL of the page to scrape.
+        title: Human-readable title associated with this link (used as metadata).
+
+    Returns:
+        A dict with keys {content, dates, title} on success, or None if the
+        page could not be fetched or contained no usable text.
+    """
     content = fetch_with_retry(url)
     if not content:
         return None
@@ -369,7 +476,19 @@ def extract_document_content(url, title):
     return None
 
 def is_navigation_text(text):
-    """Check if text is likely navigation/menu content."""
+    """
+    Heuristic filter to discard common JKBOTE navigation/menu strings.
+
+    Returns True only when the text is both very short (<20 chars) AND
+    exactly matches a known navigation label.  This prevents valid content
+    that merely *contains* a nav keyword from being discarded.
+
+    Args:
+        text: Raw string extracted from an HTML element.
+
+    Returns:
+        True if the text is navigation boilerplate, False otherwise.
+    """
     nav_keywords = [
         'home', 'about us', 'contact us', 'login', 'register', 'skip to main content',
         'call', 'mail', 'polytechnic', 'iti', 'examination portal', 'migration',
@@ -385,7 +504,24 @@ def is_navigation_text(text):
 
 
 def markdown_to_html(text):
-    """Convert Gemini markdown output to safe HTML with clickable hyperlinks."""
+    """
+    Convert Gemini's Markdown-flavoured response text to sanitised HTML.
+
+    Processing steps (in order):
+      1. HTML-escape raw < > & to neutralise any injection attempts.
+      2. Convert **bold** and *italic* Markdown to <strong>/<em> tags.
+      3. Convert [title](url) Markdown links → clickable <a> tags
+         (only http/https URLs are allowed; others are left untouched).
+      4. Convert bare https?:// URLs that are not already inside an <a> tag.
+      5. Convert leading `- ` or `* ` list items → <li> elements,
+         wrapping consecutive items in a <ul>.
+
+    Args:
+        text: Raw Markdown string returned by the Gemini API.
+
+    Returns:
+        Safe HTML string ready to be inserted into the DOM.
+    """
     # 1. Escape raw < > to avoid XSS (but we add our own tags below)
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     # 2. Convert **bold** and *italic*
@@ -439,19 +575,34 @@ def markdown_to_html(text):
     return ''.join(result)
 
 def fetch_with_retry(url, retries=2, timeout=10):
+    """
+    Fetch a URL with a simple retry strategy and a browser-like User-Agent.
+
+    Retries on any RequestException with a 1-second pause between attempts.
+    Returns the raw response body as text, or None on permanent failure.
+
+    Args:
+        url:     Target URL to fetch.
+        retries: Number of additional attempts after the first failure.
+        timeout: Per-request timeout in seconds.
+
+    Returns:
+        Response text string on success, None if all attempts fail.
+    """
+    # Mimic a real browser to avoid being blocked by JKBOTE's server
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
     for attempt in range(retries + 1):
         try:
             res = requests.get(url, headers=headers, timeout=timeout)
-            res.raise_for_status()
+            res.raise_for_status()  # Raise an error for 4xx/5xx responses
             return res.text
         except requests.RequestException as e:
-            if attempt == retries:
+            if attempt == retries:  # All retries exhausted
                 print(f"Failed to fetch {url} after {retries} retries: {e}")
                 return None
-            time.sleep(1)
+            time.sleep(1)  # Brief pause before next attempt
 
 @app.route("/")
 def index():
@@ -463,8 +614,16 @@ def static_files(filename):
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
+    # Rate limiting
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr).split(",")[0].strip()
+    if is_rate_limited(client_ip):
+        return jsonify({"error": "Too many requests. Please slow down."}), 429
+
     if not GEMINI_API_KEY:
         return jsonify({"text": "Error: GEMINI_API_KEY is not set in your .env file."})
+
+    if not request.is_json:
+        return jsonify({"error": "Content-Type must be application/json."}), 415
 
     data = request.json
     messages = data.get("messages", [])
@@ -476,6 +635,12 @@ def chat():
     if not last_user_message and "html" in last_user_msg_obj:
         soup_last = BeautifulSoup(last_user_msg_obj.get("html", ""), "html.parser")
         last_user_message = soup_last.get_text(separator=" ").strip()
+
+    # Input validation and sanitization
+    last_user_message = re.sub(r"<[^>]+>", "", last_user_message).strip()
+    if len(last_user_message) > 500:
+        last_user_message = last_user_message[:500]
+    last_user_message = html.escape(last_user_message)
     
     # Process query with NLP for enhanced understanding
     query_intent = nlp_processor.calculate_query_intent(last_user_message)
@@ -494,14 +659,12 @@ def chat():
         cached_response = get_cached_query(normalized_query, max_age_minutes=1440)
         
     if cached_response:
-        print(f"Cache hit for query: {normalized_query}")
+        logger.debug("Cache hit for query: %s", normalized_query)
         return jsonify({"html": cached_response})
-    
-    print(f"Original: {query_intent['original_query']}")
-    print(f"Type: {query_intent['query_type']}")
-    print(f"Enhanced: {enhanced_search_query}")
-    print(f"Semester: {query_intent['semester_info']}")
-    print(f"Session: {query_intent['session_info']}")
+
+    logger.debug("Original: %s | Type: %s | Enhanced: %s | Semester: %s | Session: %s",
+                 query_intent['original_query'], query_intent['query_type'],
+                 enhanced_search_query, query_intent['semester_info'], query_intent['session_info'])
 
     # ----------------------------------------------------------------
     # Use imported site directory from site_directory.py with NLP-enhanced query
@@ -523,14 +686,30 @@ def chat():
 
     # Fetch top 3 pages in parallel to reduce lag
     def scan_url_for_links(url):
+        """
+        Scrape all qualifying anchor tags from a single JKBOTE page.
+
+        A link qualifies when:
+          • Its resolved href belongs to an allowed domain
+            (jkbote.ac.in, jksbotelive.com, or drive.google.com).
+          • The visible link text is longer than 8 characters.
+          • The href is not a javascript:, mailto:, or tel: pseudo-link.
+
+        Args:
+            url: URL of the page to scrape.
+
+        Returns:
+            List of dicts with keys {text, href}.
+        """
         found_links = []
-        html = fetch_with_retry(url, retries=1, timeout=5)
-        if html:
-            soup = BeautifulSoup(html, "html.parser")
+        page_html = fetch_with_retry(url, retries=1, timeout=5)
+        if page_html:
+            soup = BeautifulSoup(page_html, "html.parser")
             for a in soup.find_all("a", href=True):
-                href = urljoin(url, a["href"])
-                text = a.text.replace("(NEW)", "").strip()
-                
+                href = urljoin(url, a["href"])  # Resolve relative URLs
+                text = a.text.replace("(NEW)", "").strip()  # Strip "(NEW)" badge text
+
+                # Only keep links from trusted JKBOTE-related domains
                 is_allowed = (
                     "jkbote.ac.in" in href.lower() or
                     "jksbotelive.com" in href.lower() or
@@ -554,34 +733,50 @@ def chat():
     
     # Enhanced relevance scoring with NLP insights
     def enhanced_score_link(link):
+        """
+        Compute a relevance score for a scraped link relative to the user query.
+
+        Scoring factors:
+          +1  per query word (>2 chars) found in the link text (base keyword match)
+          +3  if the link text matches the NLP-detected query type
+              (e.g. 'form' in text when query_type == 'form')
+          +5  if the link text contains the specific semester number
+          +4  if the link text contains the specific session code (MJ/ND)
+
+        Args:
+            link: Dict with keys {text, href} from scan_url_for_links.
+
+        Returns:
+            Integer relevance score (higher = more relevant).
+        """
         link_text_lower = link["text"].lower()
         score = 0
-        
-        # Base keyword matching
+
+        # Base keyword matching: count query words present in the link title
         for w in query_words:
             if w in link_text_lower and len(w) > 2:
                 score += 1
-        
-        # Boost scores based on NLP analysis
+
+        # Type-specific boosting: reward links that match the detected query type
         if query_intent['query_type'] == 'form' and 'form' in link_text_lower:
             score += 3
         if query_intent['query_type'] == 'result' and 'result' in link_text_lower:
             score += 3
         if query_intent['query_type'] == 'examination' and 'exam' in link_text_lower:
             score += 3
-            
-        # Semester-specific boosting
+
+        # Semester-specific boosting: e.g. "6" or "6th" in link text
         if query_intent['semester_info']['semester']:
             sem_num = query_intent['semester_info']['semester']
             if f"{sem_num}" in link_text_lower or f"{sem_num}th" in link_text_lower:
                 score += 5
-                
-        # Session-specific boosting
+
+        # Session-specific boosting: e.g. "mj26" or "nd25" in link text
         if query_intent['session_info']:
             session = query_intent['session_info'].lower()
             if session in link_text_lower:
                 score += 4
-                
+
         return score
     
     all_links.sort(key=enhanced_score_link, reverse=True)
@@ -596,26 +791,25 @@ def chat():
         processed_documents = []
         
         def process_top_link(link):
-            if link["href"].endswith('.pdf') or "drive.google.com" in link["href"]:
-                title_lower = link['text'].lower()
-                relevance_score = 0
-                if '6th' in title_lower and 'form' in title_lower: relevance_score += 10
-                if 'online' in title_lower and 'examination' in title_lower: relevance_score += 8
-                if 'semester' in title_lower and 'form' in title_lower: relevance_score += 6
-                if '6th' in title_lower: relevance_score += 3
-                if 'form' in title_lower: relevance_score += 3
-                if 'online' in title_lower: relevance_score += 2
-                if 'examination' in title_lower: relevance_score += 2
+            title_lower = link['text'].lower()
+            relevance_score = 1  # Base score so valid links aren't dropped
+            
+            # Dynamic relevance based on user query
+            for w in query_words:
+                if len(w) > 2 and w in title_lower:
+                    relevance_score += 2
                     
-                if relevance_score > 0:
-                    return {
-                        'title': link['text'],
-                        'content': f"Document: {link['text']} (Direct link to official notification)",
-                        'dates': [],
-                        'href': link['href'],
-                        'relevance_score': relevance_score
-                    }
-                return None
+            if query_intent['query_type'] != 'general' and query_intent['query_type'] in title_lower:
+                relevance_score += 2
+                
+            if link["href"].endswith('.pdf') or "drive.google.com" in link["href"]:
+                return {
+                    'title': link['text'],
+                    'content': f"Document: {link['text']} (Direct link to official notification)",
+                    'dates': [],
+                    'href': link['href'],
+                    'relevance_score': relevance_score + 2  # Boost direct documents
+                }
             else:
                 doc_data = get_cached_notification(link["href"])
                 if not doc_data:
@@ -625,23 +819,44 @@ def chat():
                 
                 if doc_data:
                     content_lower = doc_data['content'].lower()
-                    title_lower = doc_data['title'].lower()
-                    relevance_score = 0
-                    query_keywords = ['6th', 'semester', 'form', 'online', 'examination', '2026']
-                    for keyword in query_keywords:
-                        if keyword in content_lower or keyword in title_lower:
+                    for w in query_words:
+                        if len(w) > 2 and w in content_lower:
                             relevance_score += 1
+                    
+                    # Also extract embedded PDF links from this HTML page
+                    # and add them as extra high-priority documents
+                    page_html_content = fetch_with_retry(link["href"], retries=0, timeout=5)
+                    if page_html_content:
+                        soup_inner = BeautifulSoup(page_html_content, "html.parser")
+                        for a in soup_inner.find_all("a", href=True):
+                            pdf_href = urljoin(link["href"], a["href"])
+                            pdf_text = a.text.strip()
+                            if pdf_href.endswith('.pdf') and pdf_text and len(pdf_text) > 5:
+                                pdf_title_lower = pdf_text.lower()
+                                pdf_score = relevance_score + 3  # PDFs rank higher than listing pages
+                                for w in query_words:
+                                    if len(w) > 2 and w in pdf_title_lower:
+                                        pdf_score += 2
+                                processed_documents.append({
+                                    'title': pdf_text,
+                                    'content': f"Document: {pdf_text} (Direct PDF notification)",
+                                    'dates': [],
+                                    'href': pdf_href,
+                                    'relevance_score': pdf_score,
+                                    'is_listing_page': False
+                                })
                     
                     return {
                         'title': doc_data['title'],
                         'content': doc_data['content'],
                         'dates': doc_data['dates'],
                         'href': link['href'],
-                        'relevance_score': relevance_score
+                        'relevance_score': relevance_score,
+                        'is_listing_page': True  # Mark as a listing page, not a direct notification
                     }
                 return None
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
             for result in executor.map(process_top_link, top_links[:8]):
                 if result:
                     processed_documents.append(result)
@@ -734,7 +949,9 @@ def chat():
 
     CRITICAL RULES:
     - Find the MOST SPECIFIC notification possible
-    - Don't send users to general notification pages if a specific document exists
+    - If a link ends with .pdf it is a DIRECT document link — always prefer it over .php listing pages
+    - If a link ends with .php it may be a LISTING PAGE containing many notifications, NOT a direct link to one specific notice
+    - When using a listing page link, explicitly tell the user it is a general page where they can find the notice, not a direct link to it
     - Prioritize PDF links for official forms/notices
     - Always include direct links with descriptions
     - Use the NLP analysis to provide more targeted responses
@@ -755,42 +972,53 @@ def chat():
         }
     }
 
+    # ── Gemini API Call with Exponential-Backoff Retry ───────────────────────
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            response = requests.post(gemini_url, json=gemini_payload, headers={"Content-Type": "application/json"}, timeout=20)
-            response.raise_for_status()
+            response = requests.post(
+                gemini_url,
+                json=gemini_payload,
+                headers={"Content-Type": "application/json"},
+                timeout=20
+            )
+            response.raise_for_status()  # Raise on 4xx/5xx HTTP errors
             data = response.json()
-            
+
             if "candidates" in data and len(data["candidates"]) > 0:
+                # Extract the generated text from the first candidate
                 ai_text = data["candidates"][0]["content"]["parts"][0]["text"]
-                
-                # Post-processing: Remove vertexaisearch links or other undesirable links
-                # We explicitly target the vertexaisearch redirect links often added by Google Search grounding
+
+                # Remove Vertex AI Search redirect links that Gemini sometimes injects
+                # via its Search Grounding feature; these are not useful to end-users.
                 ai_text = re.sub(r'https?://vertexaisearch\.cloud\.google\.com/[^\s)]+', '', ai_text)
-                # Remove any trailing empty citations like [1] [2] or (Source: ) that might point to the deleted links
+                # Clean up orphaned numeric citation markers left after link removal
                 ai_text = re.sub(r'\[\d+\]', '', ai_text)
-                
-                # Fix markdown escaping of underscores in URLs
+
+                # Unescape Markdown's escaped underscores inside URLs (e.g. \_)
                 ai_text = ai_text.replace(r'\_', '_')
-                
+
+                # Convert Markdown to sanitised HTML for the frontend
                 ai_html = markdown_to_html(ai_text)
-                
-                # Cache the generated response if it is not a follow-up conversation
+
+                # Cache the response for standalone (non-follow-up) queries to
+                # avoid redundant Gemini API calls for repeated questions.
                 if not is_follow_up:
                     try:
                         cache_query(normalized_query, ai_html)
                     except Exception as cache_error:
                         print(f"Failed to cache generated response: {cache_error}")
-                    
+
                 return jsonify({"html": ai_html})
             else:
+                # Gemini returned a response body with no usable candidates
                 return jsonify({"text": "I'm sorry, I couldn't generate a response."})
-                
+
         except requests.exceptions.HTTPError as e:
+            # Retry on transient server-side errors using exponential back-off
             if response.status_code in [500, 502, 503, 504] and attempt < max_retries - 1:
                 print(f"Gemini API {response.status_code} error, retrying in {2 ** attempt} seconds...")
-                time.sleep(2 ** attempt)
+                time.sleep(2 ** attempt)  # 1s, 2s, 4s ...
                 continue
             print("Gemini API Error:", e)
             return jsonify({"error": f"Gemini API Error: {response.status_code}"})
@@ -799,4 +1027,5 @@ def chat():
             return jsonify({"error": "Failed to connect to the Gemini API."})
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5010, threaded=True)
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    app.run(debug=debug_mode, port=5010, threaded=True)

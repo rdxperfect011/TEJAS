@@ -1,3 +1,21 @@
+/**
+ * script.js – TEJAS Chatbot Frontend Controller
+ * ------------------------------------------------
+ * Configures the <tejas-chat> Web Component and manages the floating
+ * chat widget UI (toggle button, tooltip, timestamps, suggestion chips).
+ *
+ * Responsibilities:
+ *  • Seed the initial chat history with a branded welcome message.
+ *  • Style the text input, submit button, and message bubbles.
+ *  • Intercept outgoing requests and incoming responses to inject
+ *    timestamps and convert Markdown links to clickable HTML.
+ *  • Observe shadow-DOM mutations to append timestamps to user bubbles.
+ *  • Handle open/close toggling of the floating chat widget.
+ *
+ * Depends on: tejas.js (compiled Web Component bundle)
+ */
+
+// ── Chat element reference ───────────────────────────────────────────
 const chatElementRef = document.getElementById('chat-element');
         
 // Setup Initial Chat History
@@ -24,7 +42,8 @@ chatElementRef.history = [
   },
 ];
 
-// Ensure the AI label inside chat bubbles is named "TEJAS"
+// ── Bubble name labels ───────────────────────────────────────────────────────────
+// Override the default sender label so AI messages show "TEJAS" instead of "AI".
 chatElementRef.names = {
   default: {
     style: {
@@ -44,7 +63,8 @@ chatElementRef.names = {
   }
 };
 
-// Premium UI configuration with JKBOTE colors
+// ── Text input field styling ────────────────────────────────────────────────────────
+// Uses JKBOTE's white/blue palette with a subtle inset shadow and focus ring.
 chatElementRef.textInput = {
   placeholder: {text: "Type your message..."},
   styles: {
@@ -70,6 +90,7 @@ chatElementRef.textInput = {
   }
 };
 
+// ── Send button styling ────────────────────────────────────────────────────────────
 chatElementRef.submitButtonStyles = {
   submit: {
     container: {
@@ -103,6 +124,10 @@ chatElementRef.submitButtonStyles = {
   }
 };
 
+// ── Message bubble styling ─────────────────────────────────────────────────────────
+// User bubbles: dark-blue gradient, right-rounded.
+// AI bubbles: white card with light border, left-rounded.
+// Loading bubble mirrors AI style with a blue accent colour.
 chatElementRef.messageStyles = {
   default: {
     shared: {
@@ -158,35 +183,55 @@ chatElementRef.chatStyle = {
   background: "linear-gradient(to bottom, #fcfdff 0%, #f2f7fd 100%)"
 };
 
-// Python API Handler Logic
+// ── API endpoint configuration ────────────────────────────────────────────────────────
+// Point the Web Component at the Flask /api/chat endpoint.
 chatElementRef.request = {
   url: '/api/chat',
   method: 'POST'
 };
 
-// Intercept outgoing request to match backend expected format
+// Request interceptor – pass through unchanged.
+// The Web Component already serialises the full conversation history;
+// no additional transformation is required before sending to the backend.
 chatElementRef.requestInterceptor = (requestDetails) => {
-  // Just pass through the current message without history to avoid conflicts
   return requestDetails;
 };
 
-// Helper: get current time as HH:MM string
+// ── Timestamp helpers ──────────────────────────────────────────────────────────────
+
+/** Returns the current local time formatted as HH:MM (e.g. "14:05"). */
 function getCurrentTimeString() {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// Timestamp HTML snippet appended to every message
+/**
+ * Generates a small timestamp <div> to append below a chat bubble.
+ *
+ * @param {boolean} alignRight - When true the text is right-aligned
+ *   (used for user bubbles); false (default) left-aligns (AI bubbles).
+ * @returns {string} HTML string for the timestamp element.
+ */
 function makeTimestampHTML(alignRight = false) {
   return `<div style="text-align:${alignRight ? 'right' : 'left'}; font-size:10.5px; opacity:0.5; margin-top:4px; font-weight:500;">${getCurrentTimeString()}</div>`;
 }
 
-// Intercept response: use 'html' field so links are rendered as clickable hyperlinks
+// ── Response interceptor ────────────────────────────────────────────────────────────
+/**
+ * Post-processes every API response before the Web Component renders it.
+ *
+ * Priority:
+ *  1. If the backend returned an `html` field (pre-rendered by markdown_to_html),
+ *     append a timestamp and return it directly.
+ *  2. If only a plain `text` field is present, convert any Markdown-style
+ *     [label](url) links to <a> tags and wrap in a pre-wrap span.
+ *  3. Otherwise pass the response through unchanged.
+ */
 chatElementRef.responseInterceptor = (response) => {
-  const timestamp = makeTimestampHTML(false);
+  const timestamp = makeTimestampHTML(false); // Left-aligned for AI messages
   if (response.html) {
     return { html: response.html + timestamp };
   }
-  // Fallback: convert any plain [text](url) patterns in the text field
+  // Fallback: convert Markdown [text](url) links in plain-text responses
   if (response.text) {
     const linkedText = response.text.replace(
       /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
@@ -194,41 +239,60 @@ chatElementRef.responseInterceptor = (response) => {
     );
     return { html: `<span style="white-space:pre-wrap;">${linkedText}</span>` + timestamp };
   }
-  return response;
+  return response; // Unknown shape – leave untouched
 };
 
-// Use MutationObserver to inject timestamps into user message bubbles via shadow root
+// ── Shadow-DOM timestamp observer ─────────────────────────────────────────────────────────
+/**
+ * Injects a right-aligned timestamp into every user message bubble.
+ *
+ * Because the <tejas-chat> Web Component renders its DOM inside a Shadow
+ * Root, standard document.querySelector cannot reach its internals.
+ * Instead we use a MutationObserver scoped to the shadow root to detect
+ * newly added nodes and append a timestamp div to matching user bubbles.
+ *
+ * The `data-timestamp-added` attribute acts as a processed-guard to
+ * prevent the observer from processing the same bubble more than once
+ * (which would cause an infinite mutation loop).
+ */
 function setupUserTimestampObserver() {
+  /**
+   * Polls for the shadow root every 500 ms until it is available,
+   * then starts observing the entire subtree for added nodes.
+   */
   const tryObserve = () => {
     const shadowRoot = chatElementRef.shadowRoot;
     if (!shadowRoot) {
+      // Shadow root not yet attached – retry after a short delay
       setTimeout(tryObserve, 500);
       return;
     }
-    
+
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType !== Node.ELEMENT_NODE) return;
-          
-          // Identify user message bubbles
-          // The library uses .user-bubble or classes containing 'user' for user messages
+
+          // The Web Component marks user message wrappers with classes that
+          // contain the word "user" (e.g. user-message-outer-container-position).
           const isUserContainer = node.classList && (
             node.classList.contains('user-message-outer-container-position') ||
             Array.from(node.classList).some(c => c.includes('user'))
           );
-          
+
           let targetBubble = null;
           if (isUserContainer) {
+            // The bubble element is nested inside the outer container
             targetBubble = node.querySelector('[class*="bubble"]');
           } else if (node.classList && Array.from(node.classList).some(c => c.includes('bubble'))) {
+            // The bubble itself was added directly; verify its parent is a user container
             const parent = node.closest('[class*="outer-message"]');
             if (parent && Array.from(parent.classList).some(c => c.includes('user'))) {
               targetBubble = node;
             }
           }
 
-          // Guard against infinity loop: check if already processed
+          // Only process each bubble once to avoid infinite mutation loops
           if (targetBubble && !targetBubble.hasAttribute('data-timestamp-added')) {
             targetBubble.setAttribute('data-timestamp-added', 'true');
             const ts = document.createElement('div');
@@ -240,7 +304,8 @@ function setupUserTimestampObserver() {
         });
       });
     });
-    
+
+    // Watch the entire shadow subtree so no newly added node is missed
     observer.observe(shadowRoot, { childList: true, subtree: true });
   };
   tryObserve();
@@ -248,16 +313,30 @@ function setupUserTimestampObserver() {
 setupUserTimestampObserver();
 
 
-// Widget Toggle Logic
-const toggleBtn = document.getElementById('chat-toggle-btn');
+// ── Floating chat widget toggle ─────────────────────────────────────────────────────────
+const toggleBtn       = document.getElementById('chat-toggle-btn');
 const widgetContainer = document.getElementById('chat-widget-container');
-const tooltip = document.getElementById('chat-tooltip');
+const tooltip         = document.getElementById('chat-tooltip');
+
+/** Tracks whether the chat widget is currently visible. */
 let isOpen = false;
 
+/**
+ * Toggle the chat widget open/closed on every button click.
+ *
+ * When opening:
+ *  • Add the `.show-widget` CSS class to slide the panel into view.
+ *  • Swap the speech-bubble SVG for the ✕ close SVG.
+ *  • Permanently hide the tooltip (it has served its purpose).
+ *
+ * When closing:
+ *  • Remove `.show-widget` to animate the panel back off-screen.
+ *  • Restore the speech-bubble icon.
+ */
 toggleBtn.addEventListener('click', () => {
   isOpen = !isOpen;
-  const defaultIcon = document.querySelector('.default-icon');
-  const closeIcon = document.querySelector('.close-icon');
+  const defaultIcon = document.querySelector('.default-icon'); // Speech bubble SVG
+  const closeIcon   = document.querySelector('.close-icon');   // × cross SVG
 
   if (isOpen) {
     widgetContainer.classList.add('show-widget');
@@ -265,9 +344,10 @@ toggleBtn.addEventListener('click', () => {
       defaultIcon.style.display = 'none';
       closeIcon.style.display = 'block';
     } else {
+      // Fallback for browsers that don't load the inline SVG correctly
       toggleBtn.innerHTML = '✕';
     }
-    // Hide tooltip entirely once interacted
+    // Dismiss the tooltip permanently after the first interaction
     if (tooltip) tooltip.style.display = 'none';
   } else {
     widgetContainer.classList.remove('show-widget');
@@ -275,7 +355,7 @@ toggleBtn.addEventListener('click', () => {
       defaultIcon.style.display = 'block';
       closeIcon.style.display = 'none';
     } else {
-      toggleBtn.innerHTML = '💬';
+      toggleBtn.innerHTML = '💬'; // Fallback emoji icon
     }
   }
 });
