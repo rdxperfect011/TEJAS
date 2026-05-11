@@ -340,8 +340,34 @@ tejas-chat {
   50% { transform: translateY(-6px); }
 }
 
+/* Widget Footer Styles */
+.widget-footer {
+  text-align: center;
+  padding: 10px 15px 14px;
+  font-size: 11px;
+  color: #8aa1bc;
+  background-color: #ffffff;
+  letter-spacing: 0.3px;
+  font-weight: 500;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom-left-radius: 24px;
+  border-bottom-right-radius: 24px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.widget-footer .team-names {
+  transition: color 0.3s ease;
+}
+
+.widget-footer .team-names:hover {
+  color: #0056b3;
+  cursor: default;
+}
+
 /* Mobile Device Adjustments */
 @media (max-width: 600px) {
+
   #chat-widget-container {
     right: 15px;
     bottom: 80px; 

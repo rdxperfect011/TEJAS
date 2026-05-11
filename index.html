@@ -33,6 +33,8 @@
       <p>Scroll down or open the chat widget in the bottom right corner to get started.</p>
     </div>
     
+
+
     <!-- Floating Tooltip -->
     <div class="chat-tooltip" id="chat-tooltip">
       <div class="tooltip-icon">✨</div>
@@ -68,13 +70,18 @@
       <tejas-chat 
         id="chat-element" 
         demo="false" 
-        style="width: 100%; flex: 1; border: none; border-bottom-left-radius: 18px; border-bottom-right-radius: 18px;"
+        style="width: 100%; flex: 1; border: none;"
         names='{"ai": {"text": "Tejas"}}'
         avatars='{
           "ai": {"src": "https://img.icons8.com/color/48/000000/bot.png"}, 
           "user": {"src": "https://img.icons8.com/ios-filled/50/cccccc/user-male-circle.png"}
         }'
       ></tejas-chat>
+      
+      <!-- Widget Footer -->
+      <div class="widget-footer">
+        &copy; 2026 Team RDx &mdash; <span class="team-names">Tanmay Jamwal, Saksham Gupta &amp; Archita Gupta</span>
+      </div>
     </div>
 
     <!-- Reference to our external JS file instead of inline messy JS -->
