@@ -707,7 +707,8 @@ def chat():
             soup = BeautifulSoup(page_html, "html.parser")
             for a in soup.find_all("a", href=True):
                 href = urljoin(url, a["href"])  # Resolve relative URLs
-                text = a.text.replace("(NEW)", "").strip()  # Strip "(NEW)" badge text
+                is_new = "(NEW)" in a.text.upper() or "NEW" in a.text.upper()
+                text = a.text.replace("(NEW)", "").replace("(new)", "").replace("NEW", "").strip()  # Strip "(NEW)" badge text
 
                 # Only keep links from trusted JKBOTE-related domains
                 is_allowed = (
@@ -718,8 +719,14 @@ def chat():
                 if not is_allowed:
                     continue
 
+                # Ignore pure navigation links if they are short
                 if len(text) > 8 and not href.startswith(("javascript:", "mailto:", "tel:")):
-                    found_links.append({"text": text, "href": href})
+                    found_links.append({
+                        "text": text, 
+                        "href": href,
+                        "is_new": is_new,
+                        "is_pdf": href.lower().endswith(".pdf")
+                    })
         return found_links
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
@@ -776,6 +783,20 @@ def chat():
             session = query_intent['session_info'].lower()
             if session in link_text_lower:
                 score += 4
+
+        # Boost actual document links over general listing pages
+        if link.get("is_pdf"):
+            score += 2
+
+        # Give a significant boost to newly posted links if looking for latest
+        if link.get("is_new"):
+            score += 5
+        
+        # Penalize generic listing links if we are searching for specific queries
+        if link["href"].endswith(".php") and ("notice" in link["href"] or "Result" in link["href"]):
+            # If the user literally typed exactly "all notifications", maybe it's fine, 
+            # but usually they want the actual notice.
+            score -= 1
 
         return score
     
