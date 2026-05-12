@@ -949,7 +949,8 @@ def chat():
 
     CRITICAL RULES:
     - Find the MOST SPECIFIC notification possible
-    - If a link ends with .pdf it is a DIRECT document link — always prefer it over .php listing pages
+    - If a link ends with .pdf it is a DIRECT document link — always prefer it over .php listing pages IF it is relevant to the query.
+    - DO NOT return syllabus PDFs unless the user explicitly asks for a syllabus, course, or curriculum.
     - If a link ends with .php it may be a LISTING PAGE containing many notifications, NOT a direct link to one specific notice
     - When using a listing page link, explicitly tell the user it is a general page where they can find the notice, not a direct link to it
     - Prioritize PDF links for official forms/notices
